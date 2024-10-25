@@ -1,0 +1,317 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy import stats
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def eda_on_response_variable(data, response_var):
+    """
+    Perform detailed EDA on the response variable with respect to the rest of the columns in the dataset.
+    Includes parametric and non-parametric tests for statistical analysis, along with error handling and logging.
+    
+    Parameters:
+    data (pd.DataFrame): The input tabular dataset.
+    response_var (str): The name of the response variable (target column).
+    
+    Outputs:
+    Summary statistics, correlation analysis, and relevant plots.
+    """
+    try:
+        # Data Overview
+        logging.info(f"Starting EDA for response variable: {response_var}")
+        logging.info(f"Dataset shape: {data.shape}")
+        logging.info(f"Data Types:\n{data.dtypes}")
+        logging.info(f"Missing Values:\n{data.isnull().sum()}")
+        
+        # Response Variable Overview
+        logging.info(f"Descriptive statistics for {response_var}:\n{data[response_var].describe()}")
+        
+        # Distribution and Outliers for Response Variable
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        sns.histplot(data[response_var], kde=True)
+        plt.title(f'Distribution of {response_var}')
+        
+        plt.subplot(1, 2, 2)
+        sns.boxplot(x=data[response_var])
+        plt.title(f'Boxplot of {response_var}')
+        plt.show()
+        
+    except KeyError as e:
+        logging.error(f"Response variable '{response_var}' not found in the dataset: {e}")
+        return
+    
+    # Correlation Matrix (Numerical Columns)
+    try:
+        numerical_cols = data.select_dtypes(include=[np.number]).columns
+        if len(numerical_cols) > 1:
+            plt.figure(figsize=(12, 8))
+            corr_matrix = data[numerical_cols].corr()
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
+            plt.title('Correlation Matrix')
+            plt.show()
+            logging.info(f"Correlation matrix displayed for numerical columns.")
+        else:
+            logging.warning("No numerical columns available for correlation matrix.")
+            
+    except Exception as e:
+        logging.error(f"Error generating correlation matrix: {e}")
+    
+    # EDA on Relationships with Response Variable
+    for col in data.columns:
+        if col == response_var:
+            continue
+        
+        try:
+            if data[col].dtype == 'object':  # Categorical Columns
+                plt.figure(figsize=(10, 5))
+                sns.boxplot(x=data[col], y=data[response_var])
+                plt.title(f'Boxplot of {response_var} vs {col}')
+                plt.xticks(rotation=45)
+                plt.show()
+                
+                # Non-parametric test (Kruskal-Wallis or Mann-Whitney U test)
+                groups = [group[response_var].dropna() for name, group in data.groupby(col)]
+                if len(groups) == 2:  # Binary categorical column
+                    u_stat, p_val = stats.mannwhitneyu(groups[0], groups[1], alternative='two-sided')
+                    logging.info(f"Mann-Whitney U test for {col}: U-statistic = {u_stat:.3f}, p-value = {p_val:.3f}")
+                elif len(groups) > 2:  # More than two groups
+                    h_stat, p_val = stats.kruskal(*groups)
+                    logging.info(f"Kruskal-Wallis test for {col}: H-statistic = {h_stat:.3f}, p-value = {p_val:.3f}")
+            else:  # Numerical Columns
+                plt.figure(figsize=(10, 5))
+                sns.scatterplot(x=data[col], y=data[response_var])
+                plt.title(f'Scatter plot of {response_var} vs {col}')
+                plt.show()
+
+                # Parametric and Non-parametric Correlation
+                corr_val = data[response_var].corr(data[col])
+                spearman_corr, spearman_p = stats.spearmanr(data[col], data[response_var])
+                kendall_corr, kendall_p = stats.kendalltau(data[col], data[response_var])
+                
+                logging.info(f"Pearson correlation between {response_var} and {col}: {corr_val:.3f}")
+                logging.info(f"Spearman correlation between {response_var} and {col}: {spearman_corr:.3f} (p-value = {spearman_p:.3f})")
+                logging.info(f"Kendall's Tau correlation between {response_var} and {col}: {kendall_corr:.3f} (p-value = {kendall_p:.3f})")
+                
+                sns.lmplot(x=col, y=response_var, data=data, aspect=2, height=6)
+                plt.title(f'Regression plot of {response_var} vs {col}')
+                plt.show()
+                
+        except KeyError as e:
+            logging.error(f"Column '{col}' not found in the dataset: {e}")
+        except Exception as e:
+            logging.error(f"Error processing column '{col}': {e}")
+
+# Example usage:
+# df = pd.read_csv('your_dataset.csv')
+# eda_on_response_variable(df, 'target_column')
+
+##################################
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+
+def load_data(filepath):
+    # Example function to load data
+    return pd.read_csv(filepath)
+
+def preprocess_data(df, target_column, categorical_columns=None):
+    # Preprocess the dataset: Handle missing values, encode categorical data
+    df = df.fillna(df.mean())
+    
+    # Encode categorical columns if provided
+    if categorical_columns:
+        for col in categorical_columns:
+            df[col] = LabelEncoder().fit_transform(df[col])
+
+    X = df.drop(columns=[target_column])
+    y = df[target_column]
+    
+    return X, y
+
+def create_model_pipeline():
+    # Create a pipeline with preprocessing and a classifier
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),  # Preprocessing step
+        ('clf', RandomForestClassifier())  # Default classifier
+    ])
+    
+    return pipeline
+
+def define_hyperparameters():
+    # Define hyperparameter grid for GridSearchCV
+    param_grid = {
+        'clf': [RandomForestClassifier(), GradientBoostingClassifier(), LogisticRegression(), SVC(), KNeighborsClassifier()],
+        'clf__n_estimators': [50, 100, 200],
+        'clf__max_depth': [None, 10, 20, 30],
+        'clf__C': [0.1, 1, 10],  # Only for LogisticRegression/SVM
+        'clf__kernel': ['linear', 'rbf'],  # Only for SVM
+        'clf__n_neighbors': [3, 5, 7],  # Only for KNeighborsClassifier
+    }
+    return param_grid
+
+def run_automl(X, y):
+    pipeline = create_model_pipeline()
+    param_grid = define_hyperparameters()
+
+    # Perform a train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Set up grid search
+    grid_search = GridSearchCV(pipeline, param_grid, cv=5, n_jobs=-1, verbose=2)
+    
+    # Fit model
+    grid_search.fit(X_train, y_train)
+    
+    # Get the best model
+    best_model = grid_search.best_estimator_
+    
+    # Evaluate on the test set
+    y_pred = best_model.predict(X_test)
+    evaluation_metrics = {
+        "accuracy": accuracy_score(y_test, y_pred),
+        "precision": precision_score(y_test, y_pred, average='weighted'),
+        "recall": recall_score(y_test, y_pred, average='weighted'),
+        "f1_score": f1_score(y_test, y_pred, average='weighted')
+    }
+    
+    return best_model, evaluation_metrics
+
+if __name__ == "__main__":
+    # Example usage
+    filepath = 'your_data.csv'  # Replace with actual file path
+    target_column = 'target'  # Replace with your target column
+    categorical_columns = ['cat_col1', 'cat_col2']  # Replace with your categorical columns
+    
+    df = load_data(filepath)
+    X, y = preprocess_data(df, target_column, categorical_columns)
+    
+    best_model, metrics = run_automl(X, y)
+    
+    print("Best Model:", best_model)
+    print("Evaluation Metrics:", metrics)
+############################################################################
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+import kerastuner as kt
+
+def load_data(filepath):
+    # Example function to load data
+    return pd.read_csv(filepath)
+
+def preprocess_data(df, target_column, categorical_columns=None):
+    # Preprocess the dataset: Handle missing values, encode categorical data
+    df = df.fillna(df.mean())
+    
+    # Encode categorical columns if provided
+    if categorical_columns:
+        for col in categorical_columns:
+            df[col] = LabelEncoder().fit_transform(df[col])
+    
+    X = df.drop(columns=[target_column])
+    y = df[target_column]
+    
+    return X, y
+
+def build_model(hp):
+    # Create a deep learning model using Keras Sequential API
+    model = keras.Sequential()
+    
+    # Input layer (determined by input shape)
+    model.add(layers.InputLayer(input_shape=(X_train.shape[1],)))
+
+    # Hyperparameter tuning for the number of hidden layers and neurons
+    for i in range(hp.Int('num_layers', 1, 4)):  # 1 to 4 hidden layers
+        model.add(layers.Dense(units=hp.Int('units_' + str(i),
+                                            min_value=32,
+                                            max_value=512,
+                                            step=32),
+                               activation=hp.Choice('activation', ['relu', 'tanh'])))
+        model.add(layers.Dropout(hp.Float('dropout_' + str(i), min_value=0.1, max_value=0.5, step=0.1)))
+    
+    # Output layer (softmax for classification)
+    if len(np.unique(y_train)) > 2:
+        model.add(layers.Dense(units=len(np.unique(y_train)), activation='softmax'))
+    else:
+        model.add(layers.Dense(units=1, activation='sigmoid'))
+    
+    # Hyperparameter tuning for learning rate
+    model.compile(
+        optimizer=keras.optimizers.Adam(hp.Float('learning_rate', 1e-4, 1e-2, sampling='LOG')),
+        loss='sparse_categorical_crossentropy' if len(np.unique(y_train)) > 2 else 'binary_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    return model
+
+def run_auto_deep_learning(X, y):
+    # Perform train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Standardize the data
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    # Initialize Keras Tuner
+    tuner = kt.RandomSearch(
+        build_model,
+        objective='val_accuracy',
+        max_trials=10,  # Number of different models to try
+        executions_per_trial=2,  # Number of times to test each model configuration
+        directory='auto_dl_tuner',
+        project_name='auto_dl_project'
+    )
+    
+    # Search for the best hyperparameters
+    tuner.search(X_train, y_train, epochs=10, validation_split=0.2)
+    
+    # Get the optimal model
+    best_model = tuner.get_best_models(num_models=1)[0]
+    
+    # Evaluate the model on the test set
+    test_loss, test_accuracy = best_model.evaluate(X_test, y_test, verbose=0)
+    y_pred = np.argmax(best_model.predict(X_test), axis=1)
+    
+    evaluation_metrics = {
+        "accuracy": accuracy_score(y_test, y_pred),
+        "precision": precision_score(y_test, y_pred, average='weighted'),
+        "recall": recall_score(y_test, y_pred, average='weighted'),
+        "f1_score": f1_score(y_test, y_pred, average='weighted')
+    }
+    
+    return best_model, evaluation_metrics
+
+if __name__ == "__main__":
+    # Example usage
+    filepath = 'your_data.csv'  # Replace with actual file path
+    target_column = 'target'  # Replace with your target column
+    categorical_columns = ['cat_col1', 'cat_col2']  # Replace with your categorical columns
+    
+    df = load_data(filepath)
+    X, y = preprocess_data(df, target_column, categorical_columns)
+    
+    best_model, metrics = run_auto_deep_learning(X, y)
+    
+    print("Best Model Summary:")
+    best_model.summary()
+    
+    print("Evaluation Metrics:", metrics)
